@@ -1,7 +1,7 @@
 ---
 title: "Sélection d'un modèle linéaire"
 author: "Marie Vaugoyeau"
-date: "2024/01/21"
+date: "2025/01/21"
 date-format: "D MMMM YYYY"
 format: 
   pdf:
