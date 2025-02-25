@@ -1,0 +1,341 @@
+---
+title: "Sélection d'un modèle linéaire"
+author: "Marie Vaugoyeau"
+date: "2024/01/21"
+date-format: "D MMMM YYYY"
+format: 
+  pdf:
+    toc: true
+    number-sections: true
+    papersize: letter
+execute: 
+  warning: false
+---
+
+# import des packages  
+```{r}
+library(tidyverse)
+library(palmerpenguins)
+```
+
+# Définition de la `régression linéaire`  
+
+**Objectif** : Trouver une équation de type linéaire qui permet d'expliquer une **variable réponse quantitative** par **une ou plusieurs variable(s) explicative(s)**.   
+
+:::callout-note
+## Différence entre régression linéaire et modèle linéaire  
+
+Il n'y en a pas !  
+Certaines personnes parlent de **modèle de régression linéaire**.  
+:::
+
+L'équation est de la forme : $$ Y = a_1X_1 + a_2X_2 + ... + a_nX_n +  b $$ 
+
+Avec a~i~ : la pente (ou coefficient directeur) associé à la variable X~i~ et b : l'ordonnée à l'origine ou **intecept** (en anglais).     
+ 
+# Les données  
+Les données utilisées sont celles du jeu de données `penguins` du package `{palmerpenguins}`.  
+Plus d'information sur la page d'aide `help(penguins)`.  
+  
+```{r}
+penguins |> 
+  glimpse()
+```
+
+# Réalisation d'un modèl linéaire  
+## 1^ère^ étape : Choix des variables utilisées  
+  
+Dans cette exemple, la **variable réponse** est `body_mass_g` et les **variables explicatives** sont les caractéristiques morphologiques mesurées : `bill_length_mm`, `bill_depth_mm` et `flipper_length_mm`.  
+  
+::: callout-note
+Les données ajoutées dans un model doit avoir un sens.  
+On ne peux pas ajouter toutes les variables **juste pour voir** !  
+:::
+
+Les risques à mettre toutes les variables possibles dans un modèle :  
+
+- Impossibilité d'expliquer le modèle dans la réalité (*expl : l'âge du capitaine*)  
+- Sur ou sous ajustement (aussi appelé sur ou sous apprentissage et en anglais *over or underfitting*)  
+![](img/Overfitting.png)  
+[@educative](https://www.educative.io/answers/overfitting-and-underfitting)  
+  
+Sur le graphique :  
+
+- le schéma de gauche montre un **sous-ajustement**, c'est-à-dire que la droite ne prend pas en compte les variations des données et **simplifie trop**.  
+- le schéma du milieu montre un **bon ajustement** aux données.  
+- le schéma de droite montre un **sur-ajustement**. Le courbe ne permet pas de prendre en compte de nouvelles données.  
+  
+## 2^ème^ étape : Vérifier les limites de construction du modèle       
+Les données doivent être indépendantes et suivre (ou être approximées par) des lois normales.  
+  
+Test de Shapiro-Wilk
+```{r}
+map(
+  .x = penguins |> 
+    select(where(is.numeric), - year),
+  .f = shapiro.test
+)
+```
+  
+::: callout-note
+Selon le test de Shapiro-Wilk, les données ne suivent pas des lois normales  
+:::
+  
+Représentation graphique  
+```{r}
+penguins |> 
+  select(
+    where(is.numeric),
+    - year
+  ) |> 
+  pivot_longer(everything()) |> 
+  ggplot() +
+  aes(sample = value) +
+  geom_qq() +
+  geom_qq_line() +
+  facet_wrap(~ name, scales = "free") +
+  theme_bw()
+```
+  
+Ici la normalité est acceptable, surtout qu'il y a bien plus de 30 données.  
+  
+:::callout-note  
+Le modèle linéaire est assez résistant à l'absence de normalité et il est possible de le faire en prenant en compte [**la loi des grands nombres**](https://fr.wikipedia.org/wiki/Loi_des_grands_nombres).  
+:::
+  
+Si tu as déjà un modèle linéaire, tu as dû entendre parler de multicolinéarité (comme on m'a posé la question lors du [live](https://www.twitch.tv/videos/2359516372) 😊)  
+  
+::: callout-warning
+## Définitions : multicolinéarité ou corrélation   
+
+La colinéarité est une corrélation entre variables indépendantes.  
+Quand plusieurs variables sont concernées on parle de multicolinéarité.  
+:::
+  
+Ici il est intéressant de regarder la multicolinéarité même si elle est traité plus loin !  
+  
+```{r}
+penguins |> 
+  select(where(is.numeric), - year) |>
+  drop_na() |> 
+  cor() |> 
+  corrplot::corrplot.mixed()
+```
+  
+## 3^ème^ étape : Création du modèle linéaire  
+Plusieurs packages ont des fonctions qui permettent de réaliser un modèle linéaire.  
+Ici je vais rester sur la fonction `lm()` du package `{stats}` automatiquement chargé dans l'environnement.  
+Cette fonction prend comme premier argument la `formula`, c'est-à-dire la formule de type `y ~ x` et en deuxième argument `data`, le jeu de données utilisé.  
+```{r}
+lm_body_mass <- lm(
+  body_mass_g ~ bill_length_mm + bill_depth_mm + flipper_length_mm,
+  data = penguins
+)
+```
+  
+Pour accéder aux coefficients, il y a plusieurs solutions :  
+
+- Rappeler le nom du modèle : Ne donne pas les statistiques de test    
+- Utiliser la fonction `summary()` du package `{base}` : Le plus complet      
+  
+```{r}
+lm_body_mass
+summary(lm_body_mass)
+```
+
+  
+Pour aller plus loin :  
+  
+- Utilisation de la fonction `anova()` du package `{stats}` : Permet d'afficher facilement le tableau des coefficients     
+- Prendre la fonction `Anova()` du package `{car}` : Même chose que précédent mais type II (et même III s'il y a une interaction)    
+  
+```{r}
+anova(lm_body_mass)
+car::Anova(lm_body_mass)
+```
+
+  
+## 4^ème^ étape : Validation du modèle  
+Le modèle est accepté si les **résidus** suivent une **loi normale**.  
+  
+```{r}
+lm_body_mass$residuals |> 
+  shapiro.test()
+```
+  
+  
+Les résidus suivent une loi normale (`p-valeur` > 0.05 -> impossible de rejeter l'hypothèse nulle selon laquelle les données suivent une loi normale).  
+  
+Il est aussi bien de visualiser le modèle grâce à la fonction `plot()`.  
+
+```{r}
+#| layout-ncol: 2
+#| fig-cap: 
+#|  - "La courbe rouge doit être la plus proche de la droite en pointillée"
+#|  - "Les points doivent suivre la première diagonale en pointillée"
+#|  - "La courbe rouge doit être la plus plate possible" 
+#|  - "La courbe rouge doit être proche de la droite horizontale en pointillée"
+plot(lm_body_mass)
+```
+  
+Et la multicolinéarité ?  
+```{r}
+car::vif(lm_body_mass)
+```
+  
+Il y a pas de multicolinéarité lorsque les facteurs d'inflation de la variance (en anglais *variance inflation factor (VIF)*) sont à `1`.  
+
+  
+:::callout-note  
+## Influence de la multicolinéarité  
+
+Si les **FIV** sont supérieurs à 1, la variable est corrélée aux autre et son influence est "augmentée".   
+A quel valeur est-ce grave ?  
+Pour [Paul ALLISON](https://statisticalhorizons.com/multicollinearity/) au delà de `2,5` c'est un signe d'inquiétude. Pour d'autres personnes, c'est à partir de `5`.  
+**Mon conseil** : Simplifions le modèle et voyons après !  
+::: 
+  
+  
+## 5^ème^ étape : Sélection de modèle  
+Ici, réalisation d'une sélection descendante qui revient à supprimer les variables les moins significatives.  
+  
+```{r}
+lm_body_mass_2 <- lm(
+  body_mass_g ~ bill_depth_mm + flipper_length_mm,
+  data = penguins
+)
+
+summary(lm_body_mass_2)
+anova(lm_body_mass, lm_body_mass_2)
+AIC(lm_body_mass, lm_body_mass_2)
+```
+
+Pour comparer deux modèles, j'utilise ici l'AIC.  
+
+::: callout-note
+## AIC : Critère d'Information d'Akaike (en anglais *Akaike information criterion*)  
+  
+Permet de comparer deux modèles proches (même données et une ou deux variables en plus ou en moins) pour choisir le plus significatif, c'est-à-dire celui qui a la la valeur d'AIC la plus faible. 
+
+**Attention** : si la différence est inférieure à 2, il faut faire le choix de parcimonie, c'est-à-dire de préférer le modèle le plus simple (avec le moins de variables explicatives).  
+:::
+  
+```{r}
+lm_body_mass_3 <- lm(
+  body_mass_g ~ flipper_length_mm,
+  data = penguins
+)
+
+summary(lm_body_mass_3)
+anova(lm_body_mass_2, lm_body_mass_3)
+AIC(lm_body_mass_2, lm_body_mass_3)
+```
+
+Le modèle le plus simple avec juste la longueur de la nageoire serait meilleur.  
+
+
+```{r}
+lm_body_mass_3$residuals |> 
+  shapiro.test()
+```
+  
+Les résidus suivants une loi normale, le modèle est validé.  
+
+```{r}
+#| layout-ncol: 2
+#| fig-cap: 
+#|  - "La courbe rouge doit être la plus proche de la droite en pointillée"
+#|  - "Les points doivent suivre la première diagonale en pointillée"
+#|  - "La courbe rouge doit être la plus plate possible" 
+#|  - "La courbe rouge doit être proche de la droite horizontale en pointillée"
+plot(lm_body_mass_3)
+```
+
+Les sorties graphiques de la fonction `plot()` valide le modèle aussi.  
+
+Il ne reste donc plus qu'à valoriser le modèle trouvé via un graphique.  
+
+```{r}
+ggplot(penguins) +
+  aes(x = flipper_length_mm, y = body_mass_g) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm") +
+  theme_classic()
+```
+
+Sur le graphique il semble apparaître "2 groupes", **un avec une nageoire de moins de 205 mm** et **un avec plus**.  
+Il est possible d'explorer graphiquement cette idée en ajoutant l'espèce en couleur.  
+
+```{r}
+ggplot(penguins) +
+  aes(x = flipper_length_mm, y = body_mass_g, colour = species) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm") +
+  theme_classic()
+```
+
+Création d'un modèle avec une interaction espèce et longueur de la nageoire. C'est à dire que l'espèce influence le coefficient directeur associée à la longueur de la nageoire comme vu sur le graphique.  
+L'interaction est représenté par `:` mais comme les effets simples doivent être présent dans le modèle, il faut utiliser `*` ainsi `A * B = A + B + A:B` avec `A` et `B` sont les effets simples qui ne doivent pas être supprimé du modèle si l'interaction est significative et `A:B` est l'interaction.  
+  
+```{r}
+lm_body_mass_4 <- lm(
+  body_mass_g ~ flipper_length_mm * species,
+  data = penguins
+)
+
+summary(lm_body_mass_4)
+car::Anova(lm_body_mass_4)
+```
+
+La fonction `Anova()` du package `{car}` nous permet de voir que l'interaction est significative.  
+
+```{r}
+AIC(lm_body_mass_3, lm_body_mass_4)
+```
+Selon l'AIC, le modèle avec l'interaction est beaucoup plus intéressant que le modèle simple avec que la longueur de la nageoire.  
+  
+Pour connaître la différence entre les espèces il faut faire un test post-hoc pour effectuer une comparaison multiple, ici un test post-hoc de Tukey.  
+  
+::: callout-warning
+## Attention  
+
+Un test post-hoc ne se réalise **que** si la variable concernée est **significative** dans le modèle !  
+::: 
+  
+```{r}
+library(multcomp)
+
+summary(glht(lm_body_mass_4, linfct = mcp(species="Tukey")))
+```
+
+::: callout-note
+Pour résumer, `Chinstrap` et `Adelie` sont similaires.  
+`Gentoo` est significativement différent de `Adelie` (*p-valeur* < 0.01) et légèrement différent de `Chinstrap` (*p-valeur* = 0.07).  
+  
+Si tu as l'habitude d'utiliser les lettres, `Gentoo` est `a`, `Adelie` est `b` et `Chinstrap` est `ab`.  
+:::  
+  
+
+# En savoir un peu plus sur moi  
+Bonjour, 
+  
+Je suis Marie Vaugoyeau et je suis disponible pour des **missions en freelance** d’**accompagnement à la formation** à R et à l’analyse de données et/ou en **programmation** (reprise de scripts, bonnes pratiques de codage, développement de package).  
+Ayant un **bagage recherche en écologie**, j’ai accompagné plusieurs chercheuses en biologie dans leurs analyses de données mais je suis ouverte à d’autres domaines.  
+  
+Vous pouvez retrouver mes offres [ici](https://marievaugoyeau.notion.site/MStats-Marie-Vaugoyeau-d69b566c83414152ac85eae012c970fb).  
+  
+**En plus de mes missions de consulting je diffuse mes savoirs en R et analyse de données sur plusieurs plateformes :**   
+  
+- J’ai écrit [un **livre** aux éditions ENI](https://www.editions-eni.fr/livre/langage-r-et-statistiques-initiation-a-l-analyse-de-donnees-9782409036934)  
+- Tous les mois je fais [un **live sur Twitch**](https://www.twitch.tv/marievaugoyeau/videos) pour parler d’un package de R, d’une analyse  
+- Je rédige une **newsletter** de manière irrégulière pour parler de mes **inspirations** et transmettre **des trucs et astuces sur R**. Pour s’y inscrire, [c’est par là](https://d1154691.sibforms.com/serve/MUIEAGj4fIubg6D4qHb7BoZSxNhzkV4p2L0I7GHpNopbqPeDS1J0SpOgaTDCavroygrDTCukB0La-8s1nsQw5wCANT5UP64en1GudsGbKhGVlwbvP_bJdAJ0ECF9BOZ1swRKEnKlnWzTHpLjknJvrCXiH_xw4F_go_2kVB0dWWrkJzRoE22BXImtgVOu29gBxx2hjFkINdeW7Cae?). J’ai aussi [un **blog**](https://mvaugoyeau.netlify.app/fr/) sur lequel vous pourrez retrouver une version de cet article.  
+  
+Pour en savoir encore un peu plus sur moi, il y a [LinkedIn](https://www.linkedin.com/in/marie-vaugoyeau-72ab64153/) et pour retrouver [tous ces liens et plus encore, c'est ici](https://linktr.ee/mstats)  
+  
+**N’hésitez pas à me contacter sur [marie.vaugoyeau@gmail.com](mailto:marie.vaugoyeau@gmail.com) !**  
+  
+Bonne journée   
+  
+Marie  
+  
+![](C:/Users\Marie\Dropbox\Mstats\Img\bandeauSignatureGmail.png)
